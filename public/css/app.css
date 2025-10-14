@@ -1,0 +1,45 @@
+.pdf-page {
+  transition: none;
+}
+
+.pdf-page.selected {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.pdf-page.dragging {
+  opacity: 0.5;
+}
+
+.drop-zone {
+  border: 2px dashed #cbd5e1;
+  transition: all 0.3s ease;
+}
+
+.drop-zone.drag-over {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.page-controls {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.pdf-page:hover .page-controls {
+  opacity: 1;
+}
+
+.page-number-badge {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #3b82f6;
+  color: white;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+}

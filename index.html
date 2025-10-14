@@ -9,54 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-  <style>
-    .pdf-page {
-      transition: none;
-    }
-
-    .pdf-page.selected {
-      outline: 3px solid #3b82f6;
-      outline-offset: 2px;
-    }
-
-    .pdf-page.dragging {
-      opacity: 0.5;
-    }
-
-    .drop-zone {
-      border: 2px dashed #cbd5e1;
-      transition: all 0.3s ease;
-    }
-
-    .drop-zone.drag-over {
-      border-color: #3b82f6;
-      background-color: #eff6ff;
-    }
-
-    .page-controls {
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-
-    .pdf-page:hover .page-controls {
-      opacity: 1;
-    }
-
-    .page-number-badge {
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #3b82f6;
-      color: white;
-      border-radius: 50%;
-      font-size: 12px;
-      font-weight: 600;
-      opacity: 0.85;
-    }
-  </style>
+  <link href="./public/css/app.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 
 <body class="bg-gray-50 min-h-screen">
@@ -198,7 +152,7 @@
     </aside>
   </div>
 
-  <script src="script.js"></script>
+  <script src="./public/js/main.js"></script>
 </body>
 
 </html>

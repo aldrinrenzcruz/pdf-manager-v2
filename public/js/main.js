@@ -228,7 +228,7 @@ async function addPageToGrid(pageObj) {
     
     // Checkbox (top right)
     const checkboxContainer = document.createElement('div');
-    checkboxContainer.className = 'absolute top-2 right-2 z-10';
+    checkboxContainer.className = 'absolute top-5 right-5 z-10';
     checkboxContainer.innerHTML = `
         <input type="checkbox" class="page-checkbox w-5 h-5 text-blue-600 rounded cursor-pointer" 
             ${pageObj.selected ? 'checked' : ''}>
@@ -251,12 +251,12 @@ async function addPageToGrid(pageObj) {
     
     // Bottom controls (rotate and delete)
     const bottomControls = document.createElement('div');
-    bottomControls.className = 'page-controls absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2';
+    bottomControls.className = 'page-controls absolute bottom-5 left-1/2 transform -translate-x-1/2 flex gap-2';
     bottomControls.innerHTML = `
-        <button class="rotate-btn bg-white hover:bg-gray-100 p-2 rounded-full shadow text-gray-700 w-9 h-9 flex items-center justify-center">
+        <button class="rotate-btn bg-white hover:bg-gray-100 p-2 rounded-full shadow text-gray-700 w-7 h-7 flex items-center justify-center">
             <i class="bi bi-arrow-clockwise"></i>
         </button>
-        <button class="delete-btn bg-red-500 hover:bg-red-600 p-2 rounded-full shadow text-white w-9 h-9 flex items-center justify-center">
+        <button class="delete-btn bg-red-500 hover:bg-red-600 p-2 rounded-full shadow text-white w-7 h-7 flex items-center justify-center">
             <i class="bi bi-trash"></i>
         </button>
     `;
