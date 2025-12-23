@@ -1,6 +1,27 @@
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// Debug flag
+console.log('%c=== PDF MERGER DEBUGGER ENABLED ===', 'color: green; font-weight: bold; font-size: 14px;');
+console.log('Debug mode is active. All operations will be logged to the console.');
+console.log('Type "debugInfo()" in console to see current state summary.');
+
+// Debug helper function
+window.debugInfo = function () {
+  console.log('\n=== CURRENT STATE ===');
+  console.log('Total pages loaded:', pageManager.getAllPages().length);
+  console.log('Selected pages:', pageManager.getSelectedPages().length);
+  console.log('Original files:', pageManager.originalFiles.length);
+  pageManager.originalFiles.forEach((file, i) => {
+    console.log(`  File ${i}: ${file.name} (${(file.size / 1048576).toFixed(2)} MB)`);
+  });
+  if (performance.memory) {
+    console.log('Memory usage:', (performance.memory.usedJSHeapSize / 1048576).toFixed(2), 'MB');
+    console.log('Memory limit:', (performance.memory.jsHeapSizeLimit / 1048576).toFixed(2), 'MB');
+  }
+  console.log('===================\n');
+};
+
 // Page Manager Object
 class PDFPageManager {
   constructor() {
@@ -131,9 +152,13 @@ function handleFileSelect(e) {
 
 // Process uploaded files
 async function processFiles(files) {
+  console.log('=== PROCESSING FILES ===');
+  console.log(`Number of files: ${files.length}`);
+
   // Validate all files are PDFs
   const invalidFiles = files.filter(f => !f.type.includes('pdf'));
   if (invalidFiles.length > 0) {
+    console.error('Invalid files detected:', invalidFiles);
     alert('Error: Please upload only PDF files.');
     return;
   }
@@ -152,33 +177,67 @@ async function processFiles(files) {
   // Process each PDF
   for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
     const file = files[fileIndex];
+    console.log(`\n--- Processing file ${fileIndex + 1}/${files.length}: ${file.name} (${(file.size / 1048576).toFixed(2)} MB) ---`);
     pageManager.originalFiles.push(file);
     await loadPDF(file, fileIndex);
   }
 
+  console.log('=== ALL FILES PROCESSED ===');
   updateStats();
 }
 
 // Load PDF and render pages
 async function loadPDF(file, fileIndex) {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const fileStartTime = performance.now();
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
+  try {
+    console.log('Reading file as array buffer...');
+    const arrayBuffer = await file.arrayBuffer();
+    console.log(`✓ Array buffer created (${arrayBuffer.byteLength} bytes)`);
 
-    const pageData = {
-      canvas: null,
-      pdfPage: page,
-      originalPageNum: pageNum,
-      rotation: 0,
-      fileName: file.name,
-      fileIndex,
-      arrayBuffer: arrayBuffer
-    };
+    console.log('Loading PDF document...');
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    console.log(`✓ PDF loaded: ${pdf.numPages} pages`);
 
-    const pageObj = pageManager.addPage(pageData);
-    await addPageToGrid(pageObj);
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const pageStartTime = performance.now();
+
+      if (pageNum % 10 === 0 || pageNum === 1 || pageNum === pdf.numPages) {
+        console.log(`Loading page ${pageNum}/${pdf.numPages}...`);
+      }
+
+      const page = await pdf.getPage(pageNum);
+
+      const pageData = {
+        canvas: null,
+        pdfPage: page,
+        originalPageNum: pageNum,
+        rotation: 0,
+        fileName: file.name,
+        fileIndex,
+        arrayBuffer: arrayBuffer
+      };
+
+      const pageObj = pageManager.addPage(pageData);
+      await addPageToGrid(pageObj);
+
+      const pageEndTime = performance.now();
+      if (pageNum % 10 === 0 || pageNum === 1 || pageNum === pdf.numPages) {
+        console.log(`✓ Page ${pageNum} rendered in ${(pageEndTime - pageStartTime).toFixed(2)}ms`);
+      }
+
+      // Check memory every 25 pages
+      if (pageNum % 25 === 0 && performance.memory) {
+        console.log(`Memory at page ${pageNum}: ${(performance.memory.usedJSHeapSize / 1048576).toFixed(2)} MB`);
+      }
+    }
+
+    const fileEndTime = performance.now();
+    console.log(`✓ File "${file.name}" completed in ${((fileEndTime - fileStartTime) / 1000).toFixed(2)}s`);
+  } catch (error) {
+    console.error(`✗ ERROR loading PDF "${file.name}":`, error);
+    console.error('Stack trace:', error.stack);
+    throw error;
   }
 }
 
@@ -230,9 +289,9 @@ async function addPageToGrid(pageObj) {
   const checkboxContainer = document.createElement('div');
   checkboxContainer.className = 'absolute top-5 right-5 z-10';
   checkboxContainer.innerHTML = `
-        <input type="checkbox" class="page-checkbox w-5 h-5 text-blue-600 rounded cursor-pointer" 
-            ${pageObj.selected ? 'checked' : ''}>
-    `;
+    <input type="checkbox" class="page-checkbox w-5 h-5 text-blue-600 rounded cursor-pointer" 
+        ${pageObj.selected ? 'checked' : ''}>
+  `;
 
   // Canvas container
   const canvasContainer = document.createElement('div');
@@ -253,13 +312,13 @@ async function addPageToGrid(pageObj) {
   const bottomControls = document.createElement('div');
   bottomControls.className = 'page-controls absolute bottom-5 left-1/2 transform -translate-x-1/2 flex gap-2';
   bottomControls.innerHTML = `
-        <button class="rotate-btn bg-white hover:bg-gray-100 p-2 rounded-full shadow text-gray-700 w-7 h-7 flex items-center justify-center">
-            <i class="bi bi-arrow-clockwise"></i>
-        </button>
-        <button class="delete-btn bg-red-500 hover:bg-red-600 p-2 rounded-full shadow text-white w-7 h-7 flex items-center justify-center">
-            <i class="bi bi-trash"></i>
-        </button>
-    `;
+    <button class="rotate-btn bg-white hover:bg-gray-100 p-2 rounded-full shadow text-gray-700 w-7 h-7 flex items-center justify-center">
+        <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <button class="delete-btn bg-red-500 hover:bg-red-600 p-2 rounded-full shadow text-white w-7 h-7 flex items-center justify-center">
+        <i class="bi bi-trash"></i>
+    </button>
+  `;
 
   container.appendChild(pageNumberBadge);
   container.appendChild(checkboxContainer);
@@ -303,13 +362,16 @@ async function addPageToGrid(pageObj) {
   pageDiv.addEventListener('drop', handleDrop);
   pageDiv.addEventListener('dragend', handleDragEnd);
 
-  pagesGrid.appendChild(pageDiv);
+  // Find the grid container within pagesGrid (last element with 'grid' class)
+  const gridContainer = pagesGrid.querySelector('[class*="grid-cols"]') || pagesGrid;
+  gridContainer.appendChild(pageDiv);
 }
 
 // Drag and drop handlers
 function handleDragStart(e) {
   draggedElement = e.currentTarget;
-  draggedIndex = Array.from(pagesGrid.children).indexOf(draggedElement);
+  const gridContainer = pagesGrid.querySelector('[class*="grid-cols"]') || pagesGrid;
+  draggedIndex = Array.from(gridContainer.children).indexOf(draggedElement);
   e.currentTarget.classList.add('dragging');
 }
 
@@ -320,7 +382,8 @@ function handleDragOver(e) {
 function handleDrop(e) {
   e.preventDefault();
   const dropTarget = e.currentTarget;
-  const dropIndex = Array.from(pagesGrid.children).indexOf(dropTarget);
+  const gridContainer = pagesGrid.querySelector('[class*="grid-cols"]') || pagesGrid;
+  const dropIndex = Array.from(gridContainer.children).indexOf(dropTarget);
 
   if (draggedElement && draggedElement !== dropTarget) {
     pageManager.reorderPages(draggedIndex, dropIndex);
@@ -343,7 +406,8 @@ function handleDragEnd(e) {
 
 // Update page numbers
 function updatePageNumbers() {
-  const pageElements = pagesGrid.querySelectorAll('.pdf-page');
+  const gridContainer = pagesGrid.querySelector('[class*="grid-cols"]') || pagesGrid;
+  const pageElements = gridContainer.querySelectorAll('.pdf-page');
   pageElements.forEach((el, index) => {
     const pageNumBadge = el.querySelector('.page-number-badge');
     pageNumBadge.textContent = index + 1;
@@ -387,90 +451,208 @@ function updateStats() {
   selectedPagesSpan.textContent = pageManager.getSelectedPages().length;
 }
 
-// Handle merge
+// Handle merge (OPTIMIZED VERSION)
 async function handleMerge() {
+  console.log('=== MERGE OPERATION STARTED ===');
+  const startTime = performance.now();
+
   const selectedPages = pageManager.getSelectedPages();
   const pagesToMerge = selectedPages.length > 0 ? selectedPages : pageManager.getAllPages();
+
+  console.log(`Total pages to merge: ${pagesToMerge.length}`);
+  console.log('Selected pages:', selectedPages.length > 0 ? 'Yes' : 'No (using all)');
 
   if (pagesToMerge.length === 0) {
     alert('No pages to merge');
     return;
   }
 
-  try {
-    const mergedPdf = await PDFLib.PDFDocument.create();
+  // Disable button and show progress
+  mergeBtn.disabled = true;
+  mergeBtn.textContent = 'Merging...';
 
-    for (const page of pagesToMerge) {
-      const fileIndex = page.fileIndex;
+  try {
+    console.log('Creating new PDF document...');
+    const mergedPdf = await PDFLib.PDFDocument.create();
+    console.log('✓ New PDF document created');
+
+    // ==================== PERFORMANCE OPTIMIZATION ====================
+    // Pre-load all unique source PDFs ONCE instead of loading them repeatedly
+    console.log('\n=== Pre-loading source PDFs (OPTIMIZATION) ===');
+    const loadedPdfs = new Map(); // Cache: fileIndex -> loaded PDF
+    const uniqueFileIndices = [...new Set(pagesToMerge.map(p => p.fileIndex))];
+
+    for (const fileIndex of uniqueFileIndices) {
       const originalFile = pageManager.originalFiles[fileIndex];
+      console.log(`Loading ${originalFile.name}...`);
       const arrayBuffer = await originalFile.arrayBuffer();
       const sourcePdf = await PDFLib.PDFDocument.load(arrayBuffer);
+      loadedPdfs.set(fileIndex, sourcePdf);
+      console.log(`✓ Loaded (${sourcePdf.getPageCount()} pages)`);
+    }
+    console.log(`✓ All ${uniqueFileIndices.length} source file(s) pre-loaded\n`);
+    // ==================================================================
 
-      const [copiedPage] = await mergedPdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
+    // Now process pages using cached PDFs (MUCH FASTER!)
+    for (let i = 0; i < pagesToMerge.length; i++) {
+      const page = pagesToMerge[i];
+      const pageStartTime = performance.now();
 
-      if (page.rotation !== 0) {
-        copiedPage.setRotation(PDFLib.degrees(page.rotation));
+      // Log every 10 pages to reduce console spam
+      if (i % 10 === 0 || i === 0 || i === pagesToMerge.length - 1) {
+        console.log(`\n--- Processing page ${i + 1}/${pagesToMerge.length} ---`);
+        console.log(`Page ID: ${page.id}, Original page: ${page.originalPageNum}, File: ${page.fileName}`);
       }
 
-      mergedPdf.addPage(copiedPage);
+      // Update button with progress
+      mergeBtn.textContent = `Merging ${i + 1}/${pagesToMerge.length}...`;
+
+      try {
+        // Use the cached PDF (no loading/parsing needed!)
+        const sourcePdf = loadedPdfs.get(page.fileIndex);
+
+        const [copiedPage] = await mergedPdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
+
+        if (page.rotation !== 0) {
+          copiedPage.setRotation(PDFLib.degrees(page.rotation));
+        }
+
+        mergedPdf.addPage(copiedPage);
+
+        const pageEndTime = performance.now();
+        if (i % 10 === 0 || i === 0 || i === pagesToMerge.length - 1) {
+          console.log(`✓ Page ${i + 1} completed in ${(pageEndTime - pageStartTime).toFixed(2)}ms`);
+
+          // Log memory if available
+          if (performance.memory) {
+            console.log(`Memory: ${(performance.memory.usedJSHeapSize / 1048576).toFixed(2)} MB`);
+          }
+        }
+      } catch (pageError) {
+        console.error(`✗ ERROR processing page ${i + 1}:`, pageError);
+        throw new Error(`Failed on page ${i + 1}: ${pageError.message}`);
+      }
     }
 
+    console.log('\n=== Saving merged PDF ===');
+    const saveStartTime = performance.now();
     const pdfBytes = await mergedPdf.save();
+    const saveEndTime = performance.now();
+    console.log(`✓ PDF saved (${pdfBytes.length} bytes) in ${(saveEndTime - saveStartTime).toFixed(2)}ms`);
+
     const filename = mergeFilename.value.trim() || 'merged-document';
+    console.log(`Downloading as: ${filename}.pdf`);
     downloadFile(pdfBytes, `${filename}.pdf`, 'application/pdf');
+
+    const endTime = performance.now();
+    console.log(`\n=== MERGE COMPLETED SUCCESSFULLY ===`);
+    console.log(`Total time: ${((endTime - startTime) / 1000).toFixed(2)}s`);
   } catch (error) {
-    console.error('Error merging PDF:', error);
-    alert('Error merging PDF. Please try again.');
+    console.error('\n=== MERGE FAILED ===');
+    console.error('Error details:', error);
+    console.error('Stack trace:', error.stack);
+    alert(`Error merging PDF: ${error.message}\n\nCheck console for details.`);
+  } finally {
+    mergeBtn.disabled = false;
+    mergeBtn.textContent = 'Download Merged PDF';
   }
 }
 
-// Handle extract
+// Handle extract (OPTIMIZED VERSION)
 async function handleExtract() {
+  console.log('=== EXTRACT OPERATION STARTED ===');
+  const startTime = performance.now();
+
   const selectedPages = pageManager.getSelectedPages();
   const pagesToExtract = selectedPages.length > 0 ? selectedPages : pageManager.getAllPages();
+
+  console.log(`Total pages to extract: ${pagesToExtract.length}`);
+  console.log('Selected pages:', selectedPages.length > 0 ? 'Yes' : 'No (using all)');
 
   if (pagesToExtract.length === 0) {
     alert('No pages to extract');
     return;
   }
 
+  // Disable button and show progress
+  extractBtn.disabled = true;
+  extractBtn.textContent = 'Extracting...';
+
   try {
     const mergeAsSingle = mergeSinglePdf.checked;
+    console.log(`Extract mode: ${mergeAsSingle ? 'Single PDF' : 'Individual PDFs'}`);
+
+    // ==================== PERFORMANCE OPTIMIZATION ====================
+    // Pre-load all unique source PDFs ONCE
+    console.log('\n=== Pre-loading source PDFs (OPTIMIZATION) ===');
+    const loadedPdfs = new Map();
+    const uniqueFileIndices = [...new Set(pagesToExtract.map(p => p.fileIndex))];
+
+    for (const fileIndex of uniqueFileIndices) {
+      const originalFile = pageManager.originalFiles[fileIndex];
+      console.log(`Loading ${originalFile.name}...`);
+      const arrayBuffer = await originalFile.arrayBuffer();
+      const sourcePdf = await PDFLib.PDFDocument.load(arrayBuffer);
+      loadedPdfs.set(fileIndex, sourcePdf);
+      console.log(`✓ Loaded (${sourcePdf.getPageCount()} pages)`);
+    }
+    console.log(`✓ All ${uniqueFileIndices.length} source file(s) pre-loaded\n`);
+    // ==================================================================
 
     if (mergeAsSingle) {
       // Extract as single PDF
+      console.log('Creating extracted PDF document...');
       const extractedPdf = await PDFLib.PDFDocument.create();
+      console.log('✓ New PDF document created');
 
-      for (const page of pagesToExtract) {
-        const fileIndex = page.fileIndex;
-        const originalFile = pageManager.originalFiles[fileIndex];
-        const arrayBuffer = await originalFile.arrayBuffer();
-        const sourcePdf = await PDFLib.PDFDocument.load(arrayBuffer);
+      for (let i = 0; i < pagesToExtract.length; i++) {
+        const page = pagesToExtract[i];
 
-        const [copiedPage] = await extractedPdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
-
-        if (page.rotation !== 0) {
-          copiedPage.setRotation(PDFLib.degrees(page.rotation));
+        if (i % 10 === 0 || i === 0 || i === pagesToExtract.length - 1) {
+          console.log(`\n--- Processing page ${i + 1}/${pagesToExtract.length} ---`);
         }
 
-        extractedPdf.addPage(copiedPage);
+        // Update button with progress
+        extractBtn.textContent = `Extracting ${i + 1}/${pagesToExtract.length}...`;
+
+        try {
+          const sourcePdf = loadedPdfs.get(page.fileIndex);
+          const [copiedPage] = await extractedPdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
+
+          if (page.rotation !== 0) {
+            copiedPage.setRotation(PDFLib.degrees(page.rotation));
+          }
+
+          extractedPdf.addPage(copiedPage);
+
+          if (i % 10 === 0 || i === 0 || i === pagesToExtract.length - 1) {
+            if (performance.memory) {
+              console.log(`Memory: ${(performance.memory.usedJSHeapSize / 1048576).toFixed(2)} MB`);
+            }
+          }
+        } catch (pageError) {
+          console.error(`✗ ERROR processing page ${i + 1}:`, pageError);
+          throw new Error(`Failed on page ${i + 1}: ${pageError.message}`);
+        }
       }
 
+      console.log('\n=== Saving extracted PDF ===');
+      const saveStartTime = performance.now();
       const pdfBytes = await extractedPdf.save();
+      const saveEndTime = performance.now();
+      console.log(`✓ PDF saved (${pdfBytes.length} bytes) in ${(saveEndTime - saveStartTime).toFixed(2)}ms`);
+
       const filename = extractFilename.value.trim() || 'extracted-pages';
+      console.log(`Downloading as: ${filename}.pdf`);
       downloadFile(pdfBytes, `${filename}.pdf`, 'application/pdf');
     } else {
       // Extract as individual PDFs
       if (pagesToExtract.length === 1) {
-        // Single page - download as PDF
+        console.log('Extracting single page as PDF...');
         const page = pagesToExtract[0];
         const singlePdf = await PDFLib.PDFDocument.create();
 
-        const fileIndex = page.fileIndex;
-        const originalFile = pageManager.originalFiles[fileIndex];
-        const arrayBuffer = await originalFile.arrayBuffer();
-        const sourcePdf = await PDFLib.PDFDocument.load(arrayBuffer);
-
+        const sourcePdf = loadedPdfs.get(page.fileIndex);
         const [copiedPage] = await singlePdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
 
         if (page.rotation !== 0) {
@@ -483,40 +665,72 @@ async function handleExtract() {
         const filename = extractFilename.value.trim() || 'extracted-page';
         const pageIndex = pageManager.getAllPages().findIndex(p => p.id === page.id);
         downloadFile(pdfBytes, `${filename}_page-${pageIndex + 1}.pdf`, 'application/pdf');
+
+        console.log('✓ Single page extracted');
       } else {
         // Multiple pages - download as ZIP
+        console.log('Extracting multiple pages as ZIP...');
         const zip = new JSZip();
         const filename = extractFilename.value.trim() || 'extracted-pages';
 
         for (let i = 0; i < pagesToExtract.length; i++) {
           const page = pagesToExtract[i];
-          const singlePdf = await PDFLib.PDFDocument.create();
 
-          const fileIndex = page.fileIndex;
-          const originalFile = pageManager.originalFiles[fileIndex];
-          const arrayBuffer = await originalFile.arrayBuffer();
-          const sourcePdf = await PDFLib.PDFDocument.load(arrayBuffer);
-
-          const [copiedPage] = await singlePdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
-
-          if (page.rotation !== 0) {
-            copiedPage.setRotation(PDFLib.degrees(page.rotation));
+          if (i % 10 === 0 || i === 0 || i === pagesToExtract.length - 1) {
+            console.log(`\n--- Creating PDF ${i + 1}/${pagesToExtract.length} ---`);
           }
 
-          singlePdf.addPage(copiedPage);
+          // Update button with progress
+          extractBtn.textContent = `Extracting ${i + 1}/${pagesToExtract.length}...`;
 
-          const pdfBytes = await singlePdf.save();
-          const pageIndex = pageManager.getAllPages().findIndex(p => p.id === page.id);
-          zip.file(`${filename}_page-${pageIndex + 1}.pdf`, pdfBytes);
+          try {
+            const singlePdf = await PDFLib.PDFDocument.create();
+
+            const sourcePdf = loadedPdfs.get(page.fileIndex);
+            const [copiedPage] = await singlePdf.copyPages(sourcePdf, [page.originalPageNum - 1]);
+
+            if (page.rotation !== 0) {
+              copiedPage.setRotation(PDFLib.degrees(page.rotation));
+            }
+
+            singlePdf.addPage(copiedPage);
+
+            const pdfBytes = await singlePdf.save();
+            const pageIndex = pageManager.getAllPages().findIndex(p => p.id === page.id);
+            const pdfFilename = `${filename}_page-${pageIndex + 1}.pdf`;
+
+            zip.file(pdfFilename, pdfBytes);
+
+            if (i % 10 === 0 || i === 0 || i === pagesToExtract.length - 1) {
+              console.log(`✓ PDF ${i + 1} added to ZIP`);
+            }
+          } catch (pageError) {
+            console.error(`✗ ERROR creating PDF ${i + 1}:`, pageError);
+            throw new Error(`Failed on PDF ${i + 1}: ${pageError.message}`);
+          }
         }
 
+        console.log('\n=== Generating ZIP file ===');
+        const zipStartTime = performance.now();
         const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const zipEndTime = performance.now();
+        console.log(`✓ ZIP generated (${zipBlob.size} bytes) in ${(zipEndTime - zipStartTime).toFixed(2)}ms`);
+
         downloadFile(zipBlob, `${filename}_extract.zip`, 'application/zip');
       }
     }
+
+    const endTime = performance.now();
+    console.log(`\n=== EXTRACT COMPLETED SUCCESSFULLY ===`);
+    console.log(`Total time: ${((endTime - startTime) / 1000).toFixed(2)}s`);
   } catch (error) {
-    console.error('Error extracting PDF:', error);
-    alert('Error extracting PDF. Please try again.');
+    console.error('\n=== EXTRACT FAILED ===');
+    console.error('Error details:', error);
+    console.error('Stack trace:', error.stack);
+    alert(`Error extracting PDF: ${error.message}\n\nCheck console for details.`);
+  } finally {
+    extractBtn.disabled = false;
+    extractBtn.textContent = 'Download Extracted Pages';
   }
 }
 
