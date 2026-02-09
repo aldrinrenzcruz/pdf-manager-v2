@@ -104,6 +104,7 @@ const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
 const browseBtn = document.getElementById('browseBtn');
 const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+const selectAllContainer = document.getElementById('selectAllContainer');
 const mergeTab = document.getElementById('mergeTab');
 const extractTab = document.getElementById('extractTab');
 const mergeContent = document.getElementById('mergeContent');
@@ -165,25 +166,35 @@ async function processFiles(files) {
 
   if (files.length === 0) return;
 
-  // Set default filename to first file's name
-  const firstName = files[0].name.replace('.pdf', '');
-  mergeFilename.value = firstName;
-  extractFilename.value = firstName;
+  // Set default filename ONLY on first upload
+  const isFirstUpload = pageManager.getAllPages().length === 0;
+  if (isFirstUpload) {
+    const firstName = files[0].name.replace('.pdf', '');
+    mergeFilename.value = firstName;
+    extractFilename.value = firstName;
+  }
 
-  // Hide upload zone, show grid
+  // Hide upload zone, show grid and controls
   uploadZone.classList.add('hidden');
   pagesGrid.classList.remove('hidden');
+  uploadBtn.classList.remove('hidden');
+  selectAllContainer.classList.remove('hidden');
 
   // Process each PDF
   for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
     const file = files[fileIndex];
     console.log(`\n--- Processing file ${fileIndex + 1}/${files.length}: ${file.name} (${(file.size / 1048576).toFixed(2)} MB) ---`);
+    
+    // Add to original files array
+    const actualFileIndex = pageManager.originalFiles.length;
     pageManager.originalFiles.push(file);
-    await loadPDF(file, fileIndex);
+    
+    await loadPDF(file, actualFileIndex);
   }
 
   console.log('=== ALL FILES PROCESSED ===');
   updateStats();
+  updatePageNumbers(); // Update page numbers to reflect new pages
 }
 
 // Load PDF and render pages
@@ -554,7 +565,7 @@ async function handleMerge() {
     alert(`Error merging PDF: ${error.message}\n\nCheck console for details.`);
   } finally {
     mergeBtn.disabled = false;
-    mergeBtn.textContent = 'Download Merged PDF';
+    mergeBtn.innerHTML = '<i class="bi bi-files"></i> Merge PDF';
   }
 }
 
@@ -730,7 +741,7 @@ async function handleExtract() {
     alert(`Error extracting PDF: ${error.message}\n\nCheck console for details.`);
   } finally {
     extractBtn.disabled = false;
-    extractBtn.textContent = 'Download Extracted Pages';
+    extractBtn.innerHTML = '<i class="bi bi-file-earmark-arrow-down"></i> Extract Pages';
   }
 }
 
