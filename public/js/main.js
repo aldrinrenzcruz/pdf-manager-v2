@@ -117,6 +117,19 @@ const mergeSinglePdf = document.getElementById('mergeSinglePdf');
 const totalPagesSpan = document.getElementById('totalPages');
 const selectedPagesSpan = document.getElementById('selectedPages');
 
+// Modal elements
+const previewModal = document.getElementById('previewModal');
+const closeModal = document.getElementById('closeModal');
+const prevPage = document.getElementById('prevPage');
+const nextPage = document.getElementById('nextPage');
+const modalPageTitle = document.getElementById('modalPageTitle');
+const modalFileName = document.getElementById('modalFileName');
+const modalCanvas = document.getElementById('modalCanvas');
+const modalRotateBtn = document.getElementById('modalRotateBtn');
+
+// Modal state
+let currentPreviewPageId = null;
+
 // Event Listeners
 uploadBtn.addEventListener('click', () => fileInput.click());
 browseBtn.addEventListener('click', () => fileInput.click());
@@ -126,6 +139,34 @@ mergeTab.addEventListener('click', () => switchTab('merge'));
 extractTab.addEventListener('click', () => switchTab('extract'));
 mergeBtn.addEventListener('click', handleMerge);
 extractBtn.addEventListener('click', handleExtract);
+
+// Modal event listeners
+closeModal.addEventListener('click', closePreviewModal);
+prevPage.addEventListener('click', navigateToPrevPage);
+nextPage.addEventListener('click', navigateToNextPage);
+modalRotateBtn.addEventListener('click', rotatePreviewPage);
+
+// Close modal on outside click
+previewModal.addEventListener('click', (e) => {
+  if (e.target === previewModal) {
+    closePreviewModal();
+  }
+});
+
+// Close modal on ESC key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !previewModal.classList.contains('hidden')) {
+    closePreviewModal();
+  }
+  // Navigate with arrow keys
+  if (!previewModal.classList.contains('hidden')) {
+    if (e.key === 'ArrowLeft') {
+      navigateToPrevPage();
+    } else if (e.key === 'ArrowRight') {
+      navigateToNextPage();
+    }
+  }
+});
 
 // Drag and drop for upload zone
 uploadZone.addEventListener('dragover', (e) => {
@@ -184,11 +225,11 @@ async function processFiles(files) {
   for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
     const file = files[fileIndex];
     console.log(`\n--- Processing file ${fileIndex + 1}/${files.length}: ${file.name} (${(file.size / 1048576).toFixed(2)} MB) ---`);
-    
+
     // Add to original files array
     const actualFileIndex = pageManager.originalFiles.length;
     pageManager.originalFiles.push(file);
-    
+
     await loadPDF(file, actualFileIndex);
   }
 
@@ -291,14 +332,14 @@ async function addPageToGrid(pageObj) {
   const container = document.createElement('div');
   container.className = 'relative';
 
-  // Page number badge (top left)
+  // Page number badge (moved to top-left)
   const pageNumberBadge = document.createElement('div');
-  pageNumberBadge.className = 'page-number-badge absolute bottom-5 right-5 z-10';
+  pageNumberBadge.className = 'page-number-badge absolute top-2 left-2 z-10';
   pageNumberBadge.textContent = currentIndex + 1;
 
   // Checkbox (top right)
   const checkboxContainer = document.createElement('div');
-  checkboxContainer.className = 'absolute top-5 right-5 z-10';
+  checkboxContainer.className = 'absolute top-2 right-2 z-10';
   checkboxContainer.innerHTML = `
     <input type="checkbox" class="page-checkbox w-5 h-5 text-blue-600 rounded cursor-pointer" 
         ${pageObj.selected ? 'checked' : ''}>
@@ -306,8 +347,14 @@ async function addPageToGrid(pageObj) {
 
   // Canvas container
   const canvasContainer = document.createElement('div');
-  canvasContainer.className = 'p-2 flex items-center justify-center bg-gray-100';
+  canvasContainer.className = 'p-2 flex items-center justify-center bg-gray-100 cursor-pointer';
   canvasContainer.style.minHeight = '120px';
+
+  // Click to preview
+  canvasContainer.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPreviewModal(pageObj.id);
+  });
 
   const canvasWrapper = document.createElement('div');
   canvasWrapper.style.maxWidth = '100%';
@@ -319,14 +366,14 @@ async function addPageToGrid(pageObj) {
   canvasWrapper.appendChild(canvas);
   canvasContainer.appendChild(canvasWrapper);
 
-  // Bottom controls (rotate and delete)
+  // Bottom controls bar (centered with flexbox to prevent overlap)
   const bottomControls = document.createElement('div');
-  bottomControls.className = 'page-controls absolute bottom-5 left-1/2 transform -translate-x-1/2 flex gap-2';
+  bottomControls.className = 'page-controls absolute bottom-2 left-2 right-2 flex items-center justify-center gap-2';
   bottomControls.innerHTML = `
-    <button class="rotate-btn bg-white hover:bg-gray-100 p-2 rounded-full shadow text-gray-700 w-7 h-7 flex items-center justify-center">
+    <button class="rotate-btn bg-white hover:bg-gray-100 p-2 rounded-full shadow text-gray-700 w-8 h-8 flex items-center justify-center transition-colors">
         <i class="bi bi-arrow-clockwise"></i>
     </button>
-    <button class="delete-btn bg-red-500 hover:bg-red-600 p-2 rounded-full shadow text-white w-7 h-7 flex items-center justify-center">
+    <button class="delete-btn bg-red-500 hover:bg-red-600 p-2 rounded-full shadow text-white w-8 h-8 flex items-center justify-center transition-colors">
         <i class="bi bi-trash"></i>
     </button>
   `;
@@ -756,4 +803,117 @@ function downloadFile(data, filename, mimeType) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// Modal functions
+async function openPreviewModal(pageId) {
+  const page = pageManager.getPage(pageId);
+  if (!page) return;
+
+  currentPreviewPageId = pageId;
+
+  // Update modal info
+  const pageIndex = pageManager.getAllPages().findIndex(p => p.id === pageId);
+  modalPageTitle.textContent = `Page ${pageIndex + 1}`;
+  modalFileName.textContent = page.fileName;
+
+  // Render large version of the page
+  await renderPreviewPage(page);
+
+  // Show modal
+  previewModal.classList.remove('hidden');
+
+  // Update navigation buttons
+  updateNavigationButtons();
+}
+
+function closePreviewModal() {
+  previewModal.classList.add('hidden');
+  currentPreviewPageId = null;
+  modalCanvas.innerHTML = '';
+}
+
+async function renderPreviewPage(page) {
+  // Render at higher scale for better quality
+  const viewport = page.pdfPage.getViewport({ scale: 1.5, rotation: page.rotation });
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+
+  canvas.height = viewport.height;
+  canvas.width = viewport.width;
+  canvas.style.maxWidth = '100%';
+  canvas.style.height = 'auto';
+  canvas.style.display = 'block';
+  canvas.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+
+  const renderContext = {
+    canvasContext: context,
+    viewport: viewport
+  };
+
+  try {
+    await page.pdfPage.render(renderContext).promise;
+  } catch (error) {
+    console.error('Error rendering preview page:', error);
+  }
+
+  modalCanvas.innerHTML = '';
+  modalCanvas.appendChild(canvas);
+}
+
+function navigateToPrevPage() {
+  if (!currentPreviewPageId) return;
+
+  const allPages = pageManager.getAllPages();
+  const currentIndex = allPages.findIndex(p => p.id === currentPreviewPageId);
+
+  if (currentIndex > 0) {
+    openPreviewModal(allPages[currentIndex - 1].id);
+  }
+}
+
+function navigateToNextPage() {
+  if (!currentPreviewPageId) return;
+
+  const allPages = pageManager.getAllPages();
+  const currentIndex = allPages.findIndex(p => p.id === currentPreviewPageId);
+
+  if (currentIndex < allPages.length - 1) {
+    openPreviewModal(allPages[currentIndex + 1].id);
+  }
+}
+
+function updateNavigationButtons() {
+  const allPages = pageManager.getAllPages();
+  const currentIndex = allPages.findIndex(p => p.id === currentPreviewPageId);
+
+  // Disable/enable navigation buttons
+  prevPage.style.opacity = currentIndex > 0 ? '1' : '0.3';
+  prevPage.style.cursor = currentIndex > 0 ? 'pointer' : 'not-allowed';
+
+  nextPage.style.opacity = currentIndex < allPages.length - 1 ? '1' : '0.3';
+  nextPage.style.cursor = currentIndex < allPages.length - 1 ? 'pointer' : 'not-allowed';
+}
+
+async function rotatePreviewPage() {
+  if (!currentPreviewPageId) return;
+
+  const page = pageManager.getPage(currentPreviewPageId);
+  if (!page) return;
+
+  // Rotate the page
+  pageManager.rotatePage(currentPreviewPageId, 90);
+
+  // Re-render preview
+  await renderPreviewPage(page);
+
+  // Also update the thumbnail in the grid
+  const pageDiv = document.querySelector(`[data-page-id="${currentPreviewPageId}"]`);
+  if (pageDiv) {
+    const canvasWrapper = pageDiv.querySelector('.p-2 > div');
+    const newCanvas = await renderPage(page.pdfPage, page.rotation);
+    page.canvas = newCanvas;
+    canvasWrapper.innerHTML = '';
+    canvasWrapper.appendChild(newCanvas);
+  }
 }
