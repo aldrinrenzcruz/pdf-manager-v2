@@ -207,6 +207,8 @@ async function processFiles(files) {
 
   if (files.length === 0) return;
 
+  files.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
   // Set default filename ONLY on first upload
   const isFirstUpload = pageManager.getAllPages().length === 0;
   if (isFirstUpload) {
